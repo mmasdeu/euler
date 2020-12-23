@@ -10,7 +10,9 @@ import data.finset
 noncomputable theory
 open_locale classical
 open_locale big_operators
+open measure_theory
 open interval_integral
+open set
 open real
 
 namespace tactic.interactive
@@ -78,15 +80,18 @@ lemma integrable_of_cont {f : ℝ → ℝ} (a b : ℝ) (h : continuous f):
     interval_integrable f measure_theory.measure_space.volume a b :=
 begin
     have hmeas : measurable f := continuous.measurable h,
-    have hconton : continuous_on f (set.interval a b) := continuous.continuous_on h,
+    have hconton : continuous_on f (interval a b) := continuous.continuous_on h,
     apply continuous_on.interval_integrable hconton hmeas,
     exact real.locally_finite_volume,
 end
 
+/-
+This lemma was taken directly from <https://github.com/jjaassoonn/transcendental>
+-/
 lemma ftc1 (f : ℝ -> ℝ) {hf : measurable f} {hf2 : continuous f}
 (a b : ℝ) (h : a ≤ b)
-{hf3 : measure_theory.integrable_on f (set.Icc a b)}
-(x0 : ℝ) (hx0 : x0 ∈ set.Icc a b) : 
+{hf3 : measure_theory.integrable_on f (Icc a b)}
+(x0 : ℝ) (hx0 : x0 ∈ Icc a b) : 
   has_deriv_at (λ (b : ℝ), ∫ (x : ℝ) in a..b, f x) (f x0) x0 :=
 begin
   apply integral_has_deriv_at_of_tendsto_ae_right,
@@ -99,7 +104,7 @@ begin
   },
 end
 
-theorem FTC2 (F : ℝ → ℝ) {hF : differentiable ℝ F} 
+theorem ftc2 (F : ℝ → ℝ) {hF : differentiable ℝ F} 
  {hf1 : continuous (deriv F)}
 (a b : ℝ) (h : a ≤ b) : (∫ x in a..b, deriv F x) = F b - F a :=
 begin
@@ -110,7 +115,7 @@ begin
   set G := (λ x, (∫ t in a..x, deriv F t)) with hG,
   have prop := ftc1 (deriv F) a b h,
   rw ←hG at prop,
-  have hG1 : differentiable_on ℝ G (set.Icc a b),
+  have hG1 : differentiable_on ℝ G (Icc a b),
   {
     intros x hx,
     have prop2 := ftc1 (deriv F) a b h x hx,
@@ -126,23 +131,23 @@ begin
     apply continuous.integrable_on_compact compact_Icc hf1,
     exact real.locally_finite_volume,
   },
-  have H : (set.Icc a b).indicator (deriv G) = (set.Icc a b).indicator (deriv F),
+  have H : (Icc a b).indicator (deriv G) = (Icc a b).indicator (deriv F),
   {
-    apply set.indicator_congr,
+    apply indicator_congr,
     intros x0 hx0,
     replace prop := prop x0 hx0,
     exact has_deriv_at.deriv prop,
   },
 
-  replace H : ∀ y ∈ set.Icc a b, (deriv (F - G)) y = 0,
+  replace H : ∀ y ∈ Icc a b, (deriv (F - G)) y = 0,
   {
     intros y hy,
     change deriv (λ t, F t - G t) y = 0,
     rw deriv_sub, rw sub_eq_zero,
 
-    have eq1 : (set.Icc a b).indicator (deriv F) y = deriv F y,
+    have eq1 : (Icc a b).indicator (deriv F) y = deriv F y,
     exact if_pos hy, rw <-eq1,
-    have eq2 : (set.Icc a b).indicator (deriv G) y = deriv G y,
+    have eq2 : (Icc a b).indicator (deriv G) y = deriv G y,
     exact if_pos hy, rw <-eq2, exact congr_fun H.symm y,
 
     dsimp only [],
@@ -152,35 +157,35 @@ begin
     exact has_deriv_at.differentiable_at (prop y hy),
   },
 
-  have key : ∀ y ∈ set.Ioc a b, (F - G) y = (F - G) a,
+  have key : ∀ y ∈ Ioc a b, (F - G) y = (F - G) a,
   {
     intros y hy,
-    have ineq : a < y, simp only [set.mem_Ioc] at hy, exact hy.1,
+    have ineq : a < y, simp only [mem_Ioc] at hy, exact hy.1,
     have key := exists_deriv_eq_slope (F - G) ineq _ _,
     rcases key with ⟨c, hc, hc2⟩,
-    have hc' : c ∈ set.Icc a b, 
-      simp only [set.mem_Icc, set.mem_Ioc, set.mem_Ioo] at hy ⊢ hc,
+    have hc' : c ∈ Icc a b, 
+      simp only [mem_Icc, mem_Ioc, mem_Ioo] at hy ⊢ hc,
       split, linarith, linarith,
     rw H c hc' at hc2,
     replace hc2 := eq.symm hc2,
     rw div_eq_zero_iff at hc2,
     cases hc2, exact sub_eq_zero.mp hc2,
-    simp only [set.mem_Icc, set.mem_Ioc, set.mem_Ioo] at hy ⊢ hc, linarith,
+    simp only [mem_Icc, mem_Ioc, mem_Ioo] at hy ⊢ hc, linarith,
 
     apply continuous_on.sub,
     simp only [], apply continuous.continuous_on,
     apply differentiable.continuous hF,
 
-    have hG1' : continuous_on G (set.Icc a b),
+    have hG1' : continuous_on G (Icc a b),
       apply differentiable_on.continuous_on hG1,
     simp only [], apply continuous_on.mono hG1',
-    apply set.Icc_subset_Icc, exact le_refl a, exact hy.2,
+    apply Icc_subset_Icc, exact le_refl a, exact hy.2,
 
     apply differentiable_on.sub,
     simp only [], exact differentiable.differentiable_on hF,
     simp only [], apply differentiable_on.mono hG1,
     intros z hz, 
-    simp only [set.mem_Icc, set.mem_Ioc, set.mem_Ioo] at *,
+    simp only [mem_Icc, mem_Ioc, mem_Ioo] at *,
     split, linarith, linarith,
   },
   have G_a : G a = 0, by simp only [hG, interval_integral.integral_same],
@@ -191,13 +196,35 @@ begin
   suffices : F b - G b = F a - G a, linarith,
   replace key := key b _,
   simp only [pi.sub_apply] at key ⊢, exact key,
-  simp only [set.mem_Icc, set.mem_Ioc, set.mem_Ioo] at *,
+  simp only [mem_Icc, mem_Ioc, mem_Ioo] at *,
   split, exact lt_of_le_of_ne h hab, exact le_refl b,
 
   exact hf, exact hf1,
   apply measure_theory.integrable_on.mono_set (continuous.integrable_on_compact (@compact_Icc a b) hf1),
-  exact set.subset.rfl,
+  exact subset.rfl,
   exact real.locally_finite_volume,
+end
+
+
+lemma self_mem_ae_restrict
+  {s : set ℝ} (hs : is_measurable s):
+  s ∈ (measure.restrict measure_space.volume s).ae :=
+begin
+  rw ae_restrict_eq hs,
+  simp only [exists_prop, filter.mem_principal_sets, filter.mem_inf_sets],
+  exact ⟨univ, filter.univ_mem_sets, s, by simp⟩,
+end
+
+lemma nonempty_inter_of_nonempty_inter_closure {α : Type*} [topological_space α] {s t : set α}
+  (hs : is_open s) (h : (s ∩ closure t).nonempty) : (s ∩ t).nonempty :=
+let ⟨x, xs, xt⟩ := h in _root_.mem_closure_iff.1 xt s hs xs
+
+lemma real.volume_pos_of_is_open_of_nonempty {s : set ℝ} (h : is_open s) (h' : s.nonempty) :
+  0 < volume s :=
+begin
+  rcases h' with ⟨x, hx⟩,
+  have : ∀ᶠ (y : ℝ) in nhds x, y ∈ s := filter.eventually_of_mem (mem_nhds_sets h hx) (λ y H, H),
+  exact filter.eventually.volume_pos_of_nhds_real this,
 end
 
 theorem integral_strictly_pos_of_cont (f : ℝ → ℝ) (a b : ℝ)
@@ -205,20 +232,31 @@ theorem integral_strictly_pos_of_cont (f : ℝ → ℝ) (a b : ℝ)
     (hab : a < b)
     (h : ∀ (x : ℝ), a ≤ x → x ≤ b → 0 ≤ f x)
     (hneq: ∃ x, a ≤ x ∧ x ≤ b ∧ 0 < f x) :
-    0 < ∫ x in a..b, f x := 
+    0 < ∫ x in a..b, f x :=
 begin
-    rw integral_pos_iff_support_of_nonneg_ae',
-    {
-        split, assumption,
-        simp only,
-        sorry
-    },
-    {
-        
-        sorry
-    },
-    exact integrable_of_cont a b hf,
+  rw integral_pos_iff_support_of_nonneg_ae',
+  { refine ⟨hab, _⟩,
+    let s := {b : ℝ | 0 < f b},
+    have s_open : is_open s := is_open_lt continuous_const hf,
+    have : (s ∩ closure (Ioo a b)).nonempty,
+    { rw closure_Ioo hab,
+      rcases hneq with ⟨x, ax, xb, fxpos⟩,
+      have : x ∈ s ∩ Icc a b := ⟨fxpos, ax, xb⟩,
+      exact nonempty_of_mem this },
+    have : (s ∩ Ioo a b).nonempty := nonempty_inter_of_nonempty_inter_closure s_open this,
+    have : 0 < volume (s ∩ Ioo a b) :=
+      real.volume_pos_of_is_open_of_nonempty (is_open_inter s_open is_open_Ioo) this,
+    refine this.trans_le (measure_mono (λ x hx, _)),
+    split,
+    { exact ne_of_gt (show 0 < f x, from hx.1) },
+    { exact ⟨hx.2.1, hx.2.2.le⟩ } },
+  { have : Ioc b a = ∅ := Ioc_eq_empty hab.le,
+    simp only [this, union_empty],
+    exact filter.eventually_of_mem
+      (self_mem_ae_restrict is_measurable_Ioc) (λ x hx, h x hx.1.le hx.2) },
+  { exact integrable_of_cont a b hf }
 end
+
 
 theorem integral_strictly_monotone_of_cont (f g : ℝ → ℝ) (a b : ℝ)
     (hf : continuous f) (hg : continuous g)
@@ -230,7 +268,7 @@ begin
     suffices : 0 < ∫ x in a..b, (g - f) x,
     {
         simp at this,
-        rw integral_sub at this,
+        rw interval_integral.integral_sub at this,
         {
             rw sub_pos at this,
             apply this,
@@ -267,8 +305,9 @@ begin
     apply integral_strictly_monotone_of_cont (λ x, (0:ℝ)) f a b hgcont hf hab hnonneg hx,
 end
 
-lemma int_pos_of_square (f : ℝ → ℝ) (hf : continuous f) :
-    (∃ x, 0 ≤ x ∧ x ≤ pi/2 ∧ f x ≠ 0) → 0 < ∫ x in 0..pi/2, (f x)^2 :=
+lemma int_pos_of_square (f : ℝ → ℝ) (hf : continuous f) {a b : ℝ}
+    (hab : a < b) :
+    (∃ x, a ≤ x ∧ x ≤ b ∧ f x ≠ 0) → 0 < ∫ x in a..b, (f x)^2 :=
 begin
     intro h,
     cases h with x hx,
@@ -277,7 +316,7 @@ begin
         show_continuous,
     },
     {
-        exact pi_div_two_pos,
+        exact hab,
     },
     {
         intros x hx1 hx2,
@@ -442,11 +481,11 @@ begin
     },
     have H2 : ∫ x in a..b, deriv (u*v) x = u b * v b - u a * v a,
     {
-        rw FTC2, refl,
+        rw ftc2, refl,
         exact differentiable.mul hu hv,
         repeat {assumption},
     },
-    rw [←H2, ←integral_sub],
+    rw [←H2, ←interval_integral.integral_sub],
     {
         congr,
         ext,

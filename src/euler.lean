@@ -16,37 +16,46 @@ open_locale topological_space
 /-!
 #### The proof of Euler summation : ∑ 1/n^2 = π^2/6
 
-Below there are lemmas that refer to Daniel Daners, "A short elementary proof of 1/k2=2/6".
+## Strategy
+
+1. Define sequences
+
+    Aₙ = ∫ x in 0..π/2 (cos x)^(2*n) and
+    Bₙ = ∫ x in 0..π/2 x^2 * (cos x)^(2*n).
+
+2. Use integration by parts to prove recurrence formulas
+
+    Aₙ₊₁ = (2 * n + 1) * (n+1) * Bₙ - 2*(n+1)^2 * Bₙ₊₁
+        and
+    Aₙ₊₁ = (2*n + 1) * (Aₙ - Aₙ₊₁)
+3. Express 1/((n+1)^2) in terms of two consecutive ratios:
+
+    1 / ((n +1)^2 = 2 * (Bₙ) / (Aₙ) - 2 * Bₙ₊₁ / Aₙ₊₁
+
+4. The partial sums telescope and yield
+
+    ∑ k=0..(n-1) 1 / ((k+1)^2 =  2 * B₀ / A₀ - 2 * Bₙ/Aₙ = π^2 / 6 - 2 * Bₙ/Aₙ
+
+5.  Bound the error term using the fact that
+
+    2/π * x ≤ sin x.
+
+## References
+
+Daniel Daners,
+A short elementary proof of  ,
+Mathematics Magazine 85 (2012), 361-364. (MR 3007217, Zbl 1274.97037)
+
+* <http://talus.maths.usyd.edu.au/u/daners/publ/abstracts/zeta2/>
+
+## Tags
+
+euler summation, number theory, reciprocals
+
 -/
+
 def A : ℕ → ℝ := λ n, ∫ x in 0..pi/2, (cos x)^(2*n)
 def B : ℕ → ℝ := λ n, ∫ x in 0..pi/2, x^2 * (cos x)^(2*n)
-
-lemma B_pos {n : ℕ} : 0 < B n :=
-begin
-    unfold B,
-    have pi_pos := pi_pos,
-    simp only [mul_comm, pow_mul, ←mul_pow],
-    apply int_pos_of_square,
-        show_continuous,
-    use pi / 4,
-    repeat{split},
-    repeat {linarith},
-    have sqrt2_pos : 0 < sqrt 2,
-    {
-        rw sqrt_pos,
-        exact zero_lt_two,
-    },
-    rw cos_pi_div_four,
-    push_neg,
-    split,
-    {
-        linarith,
-    },
-    {
-        apply pow_ne_zero,
-        linarith,
-    }
-end
 
 lemma eval_A0 : A 0 = pi / (2 : ℝ) :=
 begin
@@ -70,7 +79,7 @@ begin
         rw derivative_cube,
     },
     simp [hprim],
-    rw FTC2,
+    rw ftc2,
         ring,
     {
         show_differentiable,
@@ -84,6 +93,33 @@ begin
     }
 end
 
+lemma B_pos {n : ℕ} : 0 < B n :=
+begin
+    unfold B,
+    have pi_pos := pi_pos,
+    simp only [mul_comm, pow_mul, ←mul_pow],
+    apply int_pos_of_square,
+        show_continuous,
+        exact pi_div_two_pos,
+    use pi / 4,
+    repeat{split},
+    repeat {linarith},
+    have sqrt2_pos : 0 < sqrt 2,
+    {
+        rw sqrt_pos,
+        exact zero_lt_two,
+    },
+    rw cos_pi_div_four,
+    push_neg,
+    split,
+    {
+        linarith,
+    },
+    {
+        apply pow_ne_zero,
+        linarith,
+    }
+end
 
 lemma eval_first_term : 2 * B 0 / A 0 = pi^2 / 6 :=
 begin

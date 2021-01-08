@@ -18,9 +18,14 @@ open real
 namespace tactic.interactive
 
 meta def show_continuous := `[
+  all_goals {try {simp}},
   apply_rules [
     continuous_on.neg,
     continuous.continuous_on,
+    differentiable.continuous,
+    differentiable_on.continuous_on,
+    continuous.Icc_extend,
+    continuous_on.mono,
     continuous.neg,
     continuous_id,
     continuous_sin,
@@ -31,7 +36,7 @@ meta def show_continuous := `[
     continuous.smul,
     continuous.sub,
     continuous.add
-    ] 5,
+    ] 10,
   all_goals {try {norm_num}}
 ]
 
@@ -53,12 +58,25 @@ meta def show_differentiable := `[
 meta def show_nonzero := `[
   apply_rules [
     mul_ne_zero,
-    sub_ne_zero.2,
+    sub_ne_zero_of_ne,
+    pow_ne_zero,
     ne_of_gt,
     ne_of_lt
-    ] 20,
+    ] 10,
   all_goals {try {norm_cast}, try {norm_num}}
 ]
+
+meta def show_pos := `[
+  apply_rules [
+    nat.succ_pos,
+    mul_pos,
+    div_pos,
+    inv_pos.mpr,
+    pow_pos
+    ] 10,
+  all_goals {try {norm_cast}, try {norm_num}, try {nlinarith}}
+]
+
 
 meta def clear_denoms := `[
   try {rw div_eq_div_iff},
@@ -69,9 +87,12 @@ meta def clear_denoms := `[
 ]
 
 meta def discrete_field := `[
-  try {field_simp},
+  try {ext},
+  try {field_simp *},
   try {clear_denoms},
-  try {ring_exp}
+  try {ring_exp},
+  try {norm_num},
+  try {linarith}
 ]
 
 end tactic.interactive
@@ -81,128 +102,78 @@ lemma integrable_of_cont {f : ℝ → ℝ} (a b : ℝ) (h : continuous f):
 begin
     have hmeas : measurable f := continuous.measurable h,
     have hconton : continuous_on f (interval a b) := continuous.continuous_on h,
-    apply continuous_on.interval_integrable hconton hmeas,
-    exact real.locally_finite_volume,
+    exact continuous_on.interval_integrable hconton hmeas, 
 end
 
-/-
-This lemma was taken directly from <https://github.com/jjaassoonn/transcendental>
--/
-lemma ftc1 (f : ℝ -> ℝ) {hf : measurable f} {hf2 : continuous f}
-(a b : ℝ) (h : a ≤ b)
-{hf3 : measure_theory.integrable_on f (Icc a b)}
-(x0 : ℝ) (hx0 : x0 ∈ Icc a b) : 
-  has_deriv_at (λ (b : ℝ), ∫ (x : ℝ) in a..b, f x) (f x0) x0 :=
-begin
-  apply integral_has_deriv_at_of_tendsto_ae_right,
-  {
-    exact integrable_of_cont a x0 hf2,
-  },
-  {
-      apply filter.tendsto_inf_left,
-      exact continuous.tendsto hf2 x0,
-  },
-end
+lemma ftc1 {f : ℝ -> ℝ} (hf2 : continuous f) (a : ℝ) (x : ℝ) :
+  has_deriv_at (λ (b : ℝ), ∫ (t : ℝ) in a..b, f t) (f x) x :=
+interval_integral.integral_has_deriv_at_right (hf2.interval_integrable _ _) hf2.continuous_at
 
-theorem ftc2 (F : ℝ → ℝ) {hF : differentiable ℝ F} 
- {hf1 : continuous (deriv F)}
-(a b : ℝ) (h : a ≤ b) : (∫ x in a..b, deriv F x) = F b - F a :=
+theorem ftc2 (F f : ℝ → ℝ) {hF : differentiable ℝ F}
+ (hFf : deriv F = f)
+ {hf1 : continuous f}
+(a b : ℝ) (h : a ≤ b) : (∫ x in a..b, f x) = F b - F a :=
 begin
-  have hf := continuous.measurable hf1,
+  subst hFf,
   by_cases hab : (a = b),
-  rw hab, simp only [interval_integral.integral_same, sub_self],
+    simp only [hab, interval_integral.integral_same, sub_self],
+  replace h : a < b,
+  {
+      rw le_iff_lt_or_eq at h,
+      tauto,
+  },
+  have Fcont := differentiable.continuous hF,
+  have hf := continuous.measurable hf1,
 
   set G := (λ x, (∫ t in a..x, deriv F t)) with hG,
-  have prop := ftc1 (deriv F) a b h,
-  rw ←hG at prop,
-  have hG1 : differentiable_on ℝ G (Icc a b),
-  {
-    intros x hx,
-    have prop2 := ftc1 (deriv F) a b h x hx,
-    refine differentiable_at.differentiable_within_at _,
-    rw hG,
-    exact has_deriv_at.differentiable_at prop2,
+  have prop := ftc1 hf1 a,
+  have hb : b ∈ Ioc a b := right_mem_Ioc.mpr h,
+    have Gdiff : ∀ y ∈ Ioc a b, differentiable_on ℝ G (Icc a y),
     {
-        exact hf,
+        rintro y hy z hz,
+        apply differentiable_at.differentiable_within_at,
+        exact has_deriv_at.differentiable_at (prop z),
     },
-    {
-        exact hf1,
-    },
-    apply continuous.integrable_on_compact compact_Icc hf1,
-    exact real.locally_finite_volume,
-  },
-  have H : (Icc a b).indicator (deriv G) = (Icc a b).indicator (deriv F),
-  {
-    apply indicator_congr,
-    intros x0 hx0,
-    replace prop := prop x0 hx0,
-    exact has_deriv_at.deriv prop,
-  },
 
-  replace H : ∀ y ∈ Icc a b, (deriv (F - G)) y = 0,
+    have Gcont : ∀ y ∈ Ioc a b, continuous_on G (Icc a y),
+    {
+        intros y hy,
+        apply differentiable_on.continuous_on (Gdiff y hy),
+    },
+    have sub_cont : continuous_on (F - G) (Icc a b),
+    {
+        exact continuous_on.sub (continuous.continuous_on Fcont) (Gcont b hb),
+    },
+    have sub_diff : differentiable_on ℝ (F - G) (Ioo a b),
+    {
+      exact differentiable_on.sub
+        (differentiable.differentiable_on hF)
+        (differentiable_on.mono (Gdiff b hb) Ioo_subset_Icc_self),
+    },
+  have H : ∀ y ∈ Icc a b, (deriv (F - G)) y = 0,
   {
     intros y hy,
     change deriv (λ t, F t - G t) y = 0,
-    rw deriv_sub, rw sub_eq_zero,
-
-    have eq1 : (Icc a b).indicator (deriv F) y = deriv F y,
-    exact if_pos hy, rw <-eq1,
-    have eq2 : (Icc a b).indicator (deriv G) y = deriv G y,
-    exact if_pos hy, rw <-eq2, exact congr_fun H.symm y,
-
-    dsimp only [],
-    exact hF y,
-
-    dsimp only [],
-    exact has_deriv_at.differentiable_at (prop y hy),
+    rw deriv_sub (hF y) (has_deriv_at.differentiable_at (prop y)),
+    rw sub_eq_zero,
+    apply eq.symm,
+    apply has_deriv_at.deriv (prop y),
   },
 
-  have key : ∀ y ∈ Ioc a b, (F - G) y = (F - G) a,
+ have key : (F - G) b = (F - G) a,
   {
-    intros y hy,
-    have ineq : a < y, simp only [mem_Ioc] at hy, exact hy.1,
-    have key := exists_deriv_eq_slope (F - G) ineq _ _,
-    rcases key with ⟨c, hc, hc2⟩,
-    have hc' : c ∈ Icc a b, 
-      simp only [mem_Icc, mem_Ioc, mem_Ioo] at hy ⊢ hc,
-      split, linarith, linarith,
+    rcases (exists_deriv_eq_slope (F - G) h sub_cont sub_diff) with ⟨c, hc, hc2⟩,
+    have hc' : c ∈ Icc a b := mem_Icc_of_Ioo hc,
     rw H c hc' at hc2,
     replace hc2 := eq.symm hc2,
     rw div_eq_zero_iff at hc2,
-    cases hc2, exact sub_eq_zero.mp hc2,
-    simp only [mem_Icc, mem_Ioc, mem_Ioo] at hy ⊢ hc, linarith,
-
-    apply continuous_on.sub,
-    simp only [], apply continuous.continuous_on,
-    apply differentiable.continuous hF,
-
-    have hG1' : continuous_on G (Icc a b),
-      apply differentiable_on.continuous_on hG1,
-    simp only [], apply continuous_on.mono hG1',
-    apply Icc_subset_Icc, exact le_refl a, exact hy.2,
-
-    apply differentiable_on.sub,
-    simp only [], exact differentiable.differentiable_on hF,
-    simp only [], apply differentiable_on.mono hG1,
-    intros z hz, 
-    simp only [mem_Icc, mem_Ioc, mem_Ioo] at *,
-    split, linarith, linarith,
+    cases hc2,
+    work_on_goal 1 {congr},
+    all_goals {exact sub_eq_zero.mp hc2},
   },
   have G_a : G a = 0, by simp only [hG, interval_integral.integral_same],
-  have G_b : G b = ∫ x in a .. b, (deriv F) x, by rw hG,
-  rw ←G_b,
-  have eq : G b = G b - 0, rw sub_zero, rw eq, rw <-G_a,
-  rw sub_eq_sub_iff_sub_eq_sub,
   suffices : F b - G b = F a - G a, linarith,
-  replace key := key b _,
   simp only [pi.sub_apply] at key ⊢, exact key,
-  simp only [mem_Icc, mem_Ioc, mem_Ioo] at *,
-  split, exact lt_of_le_of_ne h hab, exact le_refl b,
-
-  exact hf, exact hf1,
-  apply measure_theory.integrable_on.mono_set (continuous.integrable_on_compact (@compact_Icc a b) hf1),
-  exact subset.rfl,
-  exact real.locally_finite_volume,
 end
 
 
@@ -253,7 +224,7 @@ begin
   { have : Ioc b a = ∅ := Ioc_eq_empty hab.le,
     simp only [this, union_empty],
     exact filter.eventually_of_mem
-      (self_mem_ae_restrict is_measurable_Ioc) (λ x hx, h x hx.1.le hx.2) },
+    (self_mem_ae_restrict is_measurable_Ioc) (λ x hx, h x hx.1.le hx.2) },
   { exact integrable_of_cont a b hf }
 end
 
@@ -265,32 +236,20 @@ theorem integral_strictly_monotone_of_cont (f g : ℝ → ℝ) (a b : ℝ)
     (hneq: ∃ x, a ≤ x ∧ x ≤ b ∧ f x < g x) :
     ∫ x in a..b, f x < ∫ x in a..b, g x := 
 begin
-    suffices : 0 < ∫ x in a..b, (g - f) x,
+    have H : 0 < ∫ x in a..b, (g x - f x),
     {
-        simp at this,
-        rw interval_integral.integral_sub at this,
-        {
-            rw sub_pos at this,
-            apply this,
+        apply integral_strictly_pos_of_cont
+        (g-f) a b (continuous.sub hg hf) hab,
+        all_goals {
+            simp [sub_pos],
+            assumption,
         },
-        exact integrable_of_cont a b hg,
-        exact integrable_of_cont a b hf,
     },
-    apply integral_strictly_pos_of_cont (g-f),
-    {
-        exact continuous.sub hg hf,
-    },
-    {
-        exact hab,
-    },
-    {
-        simp [sub_pos],
-        exact h,
-    },
-    {
-        simp [sub_pos],
-        exact hneq,
-    },
+    rw ←sub_pos,
+    rw ←interval_integral.integral_sub
+        (integrable_of_cont a b hg)
+        (integrable_of_cont a b hf),
+    exact H,
 end
 
 lemma int_pos_of_pos_function (f : ℝ → ℝ) {a b : ℝ} (hf : continuous f)
@@ -309,19 +268,11 @@ lemma int_pos_of_square (f : ℝ → ℝ) (hf : continuous f) {a b : ℝ}
     (hab : a < b) :
     (∃ x, a ≤ x ∧ x ≤ b ∧ f x ≠ 0) → 0 < ∫ x in a..b, (f x)^2 :=
 begin
-    intro h,
-    cases h with x hx,
+    rintro ⟨x, hx⟩,
     apply int_pos_of_pos_function,
-    {
-        show_continuous,
-    },
-    {
-        exact hab,
-    },
-    {
-        intros x hx1 hx2,
-        exact pow_two_nonneg (f x),
-    },
+    { show_continuous },
+    { exact hab },
+    { exact λ x hx1 hx2, pow_two_nonneg (f x) },
     {
         use x,
         have hy := pow_two_pos_of_ne_zero (f x) hx.2.2,
@@ -420,14 +371,14 @@ begin
     refl,
 end
 
-theorem power_rule'  {f : ℝ → ℝ} (n : ℕ) (hfd : differentiable ℝ f):
+@[simp] lemma power_rule'  {f : ℝ → ℝ} (n : ℕ) (hfd : differentiable ℝ f):
     deriv (λ (x : ℝ), (f x)^(n + 1)) = λ (x : ℝ), ((n : ℝ) + 1) • ((f x)^n * deriv f x) :=
 begin
     rw [←pow_fun_def, ←pow_deriv_fun_def],
     exact power_rule hfd,
 end
 
-theorem power_rule'' (n : ℕ) :
+@[simp] lemma power_rule'' (n : ℕ) :
     deriv (λ (x : ℝ), x^(n + 1)) = λ (x : ℝ), ((n : ℝ) + 1) • (x^n) :=
 begin
     have hfd : differentiable ℝ (λ (x:ℝ), (x:ℝ)) := differentiable_id',
@@ -436,21 +387,6 @@ begin
     rw deriv_id_my at H,
     rw H,
     simp only [mul_one, algebra.id.smul_eq_mul],
-end
-
-lemma derivative_square : deriv (λ (x : ℝ), x^2 ) = λ x, 2 * x :=
-begin
-    rw power_rule'' 1,
-    dsimp,
-    norm_num,
-end
-
-lemma derivative_cube (x : ℝ) : deriv (λ (x : ℝ), x^3 / 3) x = x^2 :=
-begin
-    rw deriv_div_const differentiable_at_pow,
-    rw power_rule'' 2,
-    dsimp,
-    ring,
 end
 
 theorem int_by_parts (u v : ℝ → ℝ) {a b : ℝ} (hab : a ≤ b) (hu : differentiable ℝ u)
@@ -481,9 +417,10 @@ begin
     },
     have H2 : ∫ x in a..b, deriv (u*v) x = u b * v b - u a * v a,
     {
-        rw ftc2, refl,
+        rw ftc2,-- refl,
         exact differentiable.mul hu hv,
         repeat {assumption},
+        congr,
     },
     rw [←H2, ←interval_integral.integral_sub],
     {
@@ -582,96 +519,65 @@ end
 lemma continuous_deriv_cospow (n: ℕ) : continuous (deriv (λ (x : ℝ), cos x ^ (n+1))) :=
 begin
     rw deriv_cospow,
-    apply continuous.mul,
-    {
-        exact continuous_cospow',
-    },
-    {
-        exact continuous_sin,
-    }
+    apply continuous.mul continuous_cospow' continuous_sin,
 end
 
-lemma sin_to_cos {x : ℝ} : (sin x)^2 = 1 - (cos x)^2 :=
+@[simp] lemma deriv_sin_times_cos {x : ℝ} : deriv(sin * cos) x =
+    2 * cos x ^ 2 - 1 :=
 begin
-    rw ←sin_sq_add_cos_sq x,
-    ring,
-end
-
-lemma cos_to_sin {x : ℝ} : (cos x)^2 = 1 - (sin x)^2:=
-begin
-    rw ←sin_sq_add_cos_sq x,
-    ring,
-end
-
-lemma deriv_sin_times_cos {x:ℝ} : deriv(sin * cos) x =
-    (cos^2 - sin^2) x:=
-begin
-    have H := deriv_mul differentiable_at_sin differentiable_at_cos,
+    have H : deriv (λ (y : ℝ), sin y * cos y) x =
+        deriv sin x * cos x + sin x * deriv cos x
+        := deriv_mul differentiable_at_sin differentiable_at_cos,
     have h0 : sin * cos = λ y, sin y * cos y, by refl,
+    have hsin : sin x^2 = 1 - cos x^2,
+    {
+        rw eq_sub_iff_add_eq,
+        exact sin_sq_add_cos_sq x,
+    },
     rw [h0, H, real.deriv_sin, real.deriv_cos],
     ring,
+    rw hsin,
+    ring,
 end
 
-lemma deriv_sin_cos  {m : ℕ} {x : ℝ} : deriv(sin * cos^(m+1)) x =
-    (m+2) * (cos x)^(m+2) - (m+1) * (cos x)^m:=
+@[simp] lemma deriv_sin_cos {m : ℕ} : deriv (λ x, sin x * cos x^(m+1)) =
+    λ x, (m+2) * cos x^(m+2) - (m+1) * cos x^m :=
 begin
-    have h0 : sin * cos^(m+1) = λ y, sin y * (cos y)^(m+1),
+    ext,
+    suffices : deriv(sin * cos^(m+1)) x =
+    (m+2) * (cos x)^(m+2) - (m+1) * (cos x)^m,
     {
-        simp only [pow_ext],
-        refl,
+        rw pow_ext at this,
+        exact this,
     },
     induction m with d hd,
     {
-        simp,
-        rw deriv_sin_times_cos,
-        simp only [pow_ext, pi.sub_apply],
-        rw sin_to_cos,
-        ring,
+        simp only [mul_one, nat.cast_zero, pow_one, zero_add, pow_zero],
+        exact deriv_sin_times_cos,
     },
     {
         simp,
         have H := deriv_mul (@differentiable_at_sin x)
             (differentiable_cospow_at d.succ),
         repeat {rw pow_succ,},
-        have h2 : (λ (y : ℝ), sin y * (cos ^ (d.succ + 1)) y) x = sin x * (cos ^ (d.succ + 1)) x,
-        {
-            dsimp,
-            refl,
-        },
+        have h2 : (λ (y : ℝ), sin y * (cos ^ (d.succ + 1)) y) x =
+            sin x * (cos ^ (d.succ + 1)) x, by tauto,
         have hsin : sin * (λ (x : ℝ), cos x ^ (d.succ + 1)) =
-            (λ x, sin x * cos x ^ (d.succ + 1)),
-        {
-            have hsin' : sin = (λ (x:ℝ), sin x), refl,
-            rw hsin',
-            refl,
-        },
+            (λ x, sin x * cos x ^ (d.succ + 1)), by tauto,
         rw hsin,
-        clear hsin,
         have hhd : (sin * cos ^ (d + 1) = λ (y : ℝ), sin y * cos y ^ (d + 1)),
         {
-            finish,
+            ext,
+            simp only [pi.mul_apply, pow_ext],
         },
-        specialize hd hhd,
-        clear hhd,
-        simp [h0],
-        clear h0,
+        simp [pow_ext],
         ring_exp,
+        have sin_to_cos : sin x^2 = 1 - cos x^2,
+        {
+            rw eq_sub_iff_add_eq,
+            exact sin_sq_add_cos_sq x,
+        },
         rw sin_to_cos,
-        generalize : cos x = C,
         discrete_field,
     },
-end
-
-lemma deriv_sin_cos' {m : ℕ} : deriv (λ x, sin x * cos x^(m+1)) =
-    λ x, (m+2) * cos x^(m+2) - (m+1) * cos x^m :=
-begin
-    ext,
-    have h := @deriv_sin_cos m x,
-    have h0 : sin * cos^(m+1) = λ y, sin y * (cos y)^(m+1),
-    {
-        simp only [pow_ext],
-        refl,
-    },
-    rw h0 at h,
-    rw h,
 end

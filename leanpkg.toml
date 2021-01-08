@@ -1,8 +1,8 @@
 [package]
 name = "euler"
 version = "0.1"
-lean_version = "leanprover-community/lean:3.23.0"
+lean_version = "leanprover-community/lean:3.24.0"
 path = "src"
 
 [dependencies]
-mathlib = {git = "https://github.com/leanprover-community/mathlib", rev = "c5c02ec8e3a368fc493cb923cb28e31478754020"}
+mathlib = {git = "https://github.com/leanprover-community/mathlib", rev = "66e02b35bc74304e21920b6dcf706d0118054244"}
